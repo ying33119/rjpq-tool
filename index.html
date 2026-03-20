@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RJPQ</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        darkbg: '#262626', 
+                        darkcard: '#303030', 
+                        darkborder: '#404040', 
+                        morandi: {
+                            red: '#b07d7d',   
+                            blue: '#6b8ba4',  
+                            green: '#889e81', 
+                            yellow: '#c2a37d' 
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getDatabase, ref, set, onValue, get } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+
+        // --- 請在此處填入你的 Firebase 配置 ---
+        const firebaseConfig = {
+            apiKey: "AIzaSyBYObSvoDFp4lv7NL1LazxjVsINtM-1DEI",
+            databaseURL: "https://my-rjpq-default-rtdb.firebaseio.com",
+            projectId: "my-rjpq",
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getDatabase(app);
+        const slotsRef = ref(db, 'slots');
+
+        const users = {
+            A: { name: '101', color: 'bg-morandi-red' },
+            B: { name: '102', color: 'bg-morandi-blue' },
+            C: { name: '103', color: 'bg-morandi-green' },
+            D: { name: '104', color: 'bg-morandi-yellow' }
+        };
+
+        let currentUser = 'A';
+
+        const container = document.getElementById('grid-container');
+        for (let l = 10; l >= 1; l--) {
+            const row = document.createElement('div');
+            row.className = 'flex items-center gap-2.5 mb-2'; 
+            
+            const levelLabel = document.createElement('div');
+            levelLabel.className = 'w-12 h-12 flex items-center justify-center text-gray-600 font-bold border border-darkborder rounded-lg bg-black/10 text-lg';
+            levelLabel.innerText = l;
+            row.appendChild(levelLabel);
+
+            const slotsGroup = document.createElement('div');
+            slotsGroup.className = 'flex flex-row-reverse gap-2';
+            for (let s = 1; s <= 4; s++) {
+                const btn = document.createElement('button');
+                btn.id = `slot-${l}-${s}`;
+                btn.className = 'w-24 h-12 border border-darkborder rounded-lg flex items-center justify-center font-bold text-gray-500 bg-darkcard transition-all text-lg';
+                btn.innerText = s;
+                btn.onclick = () => toggleSlot(l, s);
+                slotsGroup.appendChild(btn);
+            }
+            row.appendChild(slotsGroup);
+            container.appendChild(row);
+        }
+
+        function updateDisplay(data) {
+            let myPassword = [];
+            document.querySelectorAll('button[id^="slot-"]').forEach(b => {
+                b.className = 'w-24 h-12 border border-darkborder rounded-lg flex items-center justify-center font-bold text-gray-500 bg-darkcard transition-all text-lg';
+            });
+
+            for (let l = 1; l <= 10; l++) {
+                let layerChoice = "_";
+                for (let s = 1; s <= 4; s++) {
+                    const sid = `slot-${l}-${s}`;
+                    if (data && data[sid]) {
+                        const occupant = data[sid];
+                        const btn = document.getElementById(sid);
+                        btn.classList.add(users[occupant].color, 'text-white', 'border-transparent');
+                        if (occupant === currentUser) layerChoice = s;
+                    }
+                }
+                myPassword.push(layerChoice);
+            }
+            const p1 = myPassword.slice(0, 5).join('');
+            const p2 = myPassword.slice(5, 10).join('');
+            document.getElementById('password-display').innerText = `${p1} ${p2}`;
+        }
+
+        onValue(slotsRef, (snapshot) => {
+            updateDisplay(snapshot.val());
+        });
+
+        async function toggleSlot(level, slot) {
+            const clickedId = `slot-${level}-${slot}`;
+            const snapshot = await get(slotsRef);
+            const data = snapshot.val() || {};
+
+            if (data[clickedId] === currentUser) {
+                await set(ref(db, `slots/${clickedId}`), null);
+            } else if (!data[clickedId]) {
+                for (let s = 1; s <= 4; s++) {
+                    if (data[`slot-${level}-${s}`] === currentUser) {
+                        await set(ref(db, `slots/slot-${level}-${s}`), null);
+                    }
+                }
+                await set(ref(db, `slots/${clickedId}`), currentUser);
+            }
+        }
+
+        window.setUser = (u) => { 
+            currentUser = u; 
+            document.getElementById('current-user-tag').innerText = users[u].name;
+            document.getElementById('current-user-tag').className = `px-3 py-1 rounded-full text-white font-bold shadow-md text-sm ${users[u].color}`;
+            get(slotsRef).then((snap) => updateDisplay(snap.val()));
+        };
+        window.clearAll = () => set(slotsRef, null);
+        setUser('A');
+    </script>
+</head>
+<body class="bg-darkbg text-gray-400 min-h-screen p-6 flex flex-col items-center font-sans">
+
+    <div class="flex flex-col gap-4">
+        
+        <div class="flex justify-between items-end px-1 pb-1">
+            <h1 class="text-3xl font-bold text-white tracking-[0.2em]">RJPQ</h1>
+            <div id="current-user-tag">101</div>
+        </div>
+
+        <div class="bg-darkcard border border-darkborder p-4 rounded-xl shadow-lg flex justify-center">
+            <div class="grid grid-cols-4 gap-2.5">
+                <button onclick="setUser('A')" class="py-2.5 px-6 bg-morandi-red text-white rounded font-bold hover:brightness-110 transition text-base">101</button>
+                <button onclick="setUser('B')" class="py-2.5 px-6 bg-morandi-blue text-white rounded font-bold hover:brightness-110 transition text-base">102</button>
+                <button onclick="setUser('C')" class="py-2.5 px-6 bg-morandi-green text-white rounded font-bold hover:brightness-110 transition text-base">103</button>
+                <button onclick="setUser('D')" class="py-2.5 px-6 bg-morandi-yellow text-white rounded font-bold hover:brightness-110 transition text-base">104</button>
+            </div>
+        </div>
+
+        <div id="grid-container" class="bg-darkcard border border-darkborder p-6 rounded-2xl shadow-2xl"></div>
+
+        <div class="bg-black/10 border border-darkborder p-4 rounded-xl flex flex-col items-center shadow-inner">
+            <span class="text-[10px] text-gray-600 uppercase tracking-[0.4em] mb-1.5">My Sequence</span>
+            <div id="password-display" class="text-3xl font-mono font-bold tracking-[0.2em] text-gray-200">_____ _____</div>
+        </div>
+
+        <button onclick="clearAll()" class="py-3 bg-zinc-700 text-gray-300 border border-zinc-600 rounded-lg hover:bg-zinc-600 hover:text-white transition text-xs font-bold tracking-[0.3em] shadow-md mt-1">
+            CLEAR ALL SLOTS
+        </button>
+        
+    </div>
+
+</body>
+</html>
