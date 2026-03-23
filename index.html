@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>RJPQ</title>
+    <title>RJPQ - Final Stable</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = {
@@ -120,8 +120,28 @@
 
                 let lastTap = 0;
                 let tapTimeout;
+                let startX = 0;
+                let startY = 0;
+                let isScrolling = false;
+
+                btn.addEventListener('touchstart', (e) => {
+                    startX = e.touches[0].clientX;
+                    startY = e.touches[0].clientY;
+                    isScrolling = false;
+                }, { passive: true });
+
+                btn.addEventListener('touchmove', (e) => {
+                    const moveX = Math.abs(e.touches[0].clientX - startX);
+                    const moveY = Math.abs(e.touches[0].clientY - startY);
+                    if (moveX > 10 || moveY > 10) {
+                        isScrolling = true;
+                        clearTimeout(tapTimeout);
+                    }
+                }, { passive: true });
 
                 btn.addEventListener('touchend', (e) => {
+                    if (isScrolling) return; 
+
                     const currentTime = new Date().getTime();
                     const tapLength = currentTime - lastTap;
                     clearTimeout(tapTimeout);
@@ -154,6 +174,7 @@
             container.appendChild(row);
         }
 
+        // main function
         function toggleMark(sid) {
             const userMarks = localMarks[currentUser];
             const index = userMarks.indexOf(sid);
@@ -167,7 +188,6 @@
             const clickedId = `slot-${level}-${slot}`;
             const snapshot = await get(slotsRef);
             const data = snapshot.val() || {};
-
             if (data[clickedId] === currentUser) {
                 await set(ref(db, `slots/${clickedId}`), null);
             } else if (!data[clickedId]) {
@@ -196,7 +216,6 @@
                 const originalNum = sid.split('-')[2];
                 btn.className = 'w-16 h-10 md:w-20 md:h-10 border border-darkborder rounded-lg flex items-center justify-center font-bold text-gray-500 bg-darkcard transition-all text-base relative';
                 btn.innerHTML = originalNum;
-
                 if (data && data[sid]) {
                     const occupant = data[sid];
                     btn.classList.add(users[occupant].color, 'text-white', 'border-transparent');
@@ -205,7 +224,6 @@
                     btn.innerHTML = `<span class="text-red-500 absolute inset-0 flex items-center justify-center text-2xl">×</span><span class="opacity-20">${originalNum}</span>`;
                 }
             });
-
             for (let l = 1; l <= 10; l++) {
                 let choice = "_";
                 for (let s = 1; s <= 4; s++) {
