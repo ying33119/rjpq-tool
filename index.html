@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>RJPQ - Ultimate Sync & Touch</title>
+    <title>RJPQ</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = {
@@ -29,7 +29,6 @@
             user-select: none; 
             outline: none;
         }
-
         * { -webkit-tap-highlight-color: transparent; }
     </style>
 </head>
@@ -85,12 +84,9 @@
         };
 
         let currentUser = 'A';
-        
-        // --- init & offline check ---
         let localMarks = JSON.parse(localStorage.getItem('rjpq_marks') || '{"A":[],"B":[],"C":[],"D":[]}');
         let myLastClear = localStorage.getItem('rjpq_last_clear_time') || "0";
 
-        // --- monitor clear & offline update ---
         onValue(clearRef, (snapshot) => {
             const cloudClearTime = snapshot.val();
             if (cloudClearTime && String(cloudClearTime) !== myLastClear) {
@@ -122,51 +118,42 @@
                 btn.className = 'w-16 h-10 md:w-20 md:h-10 border border-darkborder rounded-lg flex items-center justify-center font-bold text-gray-500 bg-darkcard transition-all text-base relative overflow-hidden';
                 btn.innerText = s;
 
-                // --- double tap ---
                 let lastTap = 0;
                 let tapTimeout;
 
-                // smartphone detect
                 btn.addEventListener('touchend', (e) => {
                     const currentTime = new Date().getTime();
                     const tapLength = currentTime - lastTap;
                     clearTimeout(tapTimeout);
 
                     if (tapLength < 300 && tapLength > 0) {
-                        // double tap
                         toggleMark(sid);
                         if (navigator.vibrate) navigator.vibrate(50);
                         lastTap = 0;
                     } else {
-                        // single tap
                         tapTimeout = setTimeout(() => {
-                            toggleSlot(l, s); 
+                            toggleSlot(l, s);
                             lastTap = 0;
                         }, 250);
-                    }                    
+                    }
                     lastTap = currentTime;
-                    
                     if (e.cancelable) e.preventDefault();
                 }, false);
 
-                // --- PC compatible ---
                 btn.onclick = (e) => {
-                    if (e.pointerType === 'mouse') {
-                        toggleSlot(l, s);
-                    }
+                    if (e.pointerType === 'mouse') toggleSlot(l, s);
                 };
-
                 btn.oncontextmenu = (e) => {
                     e.preventDefault();
-                    if (e.pointerType === 'mouse') {
-                        toggleMark(sid);
-                    }
+                    if (e.pointerType === 'mouse') toggleMark(sid);
                 };
 
                 slotsGroup.appendChild(btn);
+            }
+            row.appendChild(slotsGroup);
+            container.appendChild(row);
         }
 
-        // --- main function ---
         function toggleMark(sid) {
             const userMarks = localMarks[currentUser];
             const index = userMarks.indexOf(sid);
@@ -229,7 +216,6 @@
             document.getElementById('password-display').innerText = `${myPassword.slice(0, 5).join('')} ${myPassword.slice(5, 10).join('')}`;
         }
 
-        // update display
         onValue(slotsRef, (snapshot) => updateDisplay(snapshot.val()));
 
         window.setUser = (u) => { 
