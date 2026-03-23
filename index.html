@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>RJPQ</title>
+    <title>RJPQ - Ultimate Sync</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = {
@@ -23,7 +23,7 @@
     </script>
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-        import { getDatabase, ref, set, onValue, get } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+        import { getDatabase, ref, set, onValue, get, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyBYObSvoDFp4lv7NL1LazxjVsINtM-1DEI",
@@ -34,6 +34,7 @@
         const app = initializeApp(firebaseConfig);
         const db = getDatabase(app);
         const slotsRef = ref(db, 'slots');
+        const clearRef = ref(db, 'lastClear');
 
         const users = {
             A: { name: '101', color: 'bg-morandi-red' },
@@ -43,12 +44,28 @@
         };
 
         let currentUser = 'A';
+        
+        let localMarks = JSON.parse(localStorage.getItem('rjpq_marks') || '{"A":[],"B":[],"C":[],"D":[]}');
+        let myLastClear = localStorage.getItem('rjpq_last_clear_time') || "0";
+
+        onValue(clearRef, (snapshot) => {
+            const cloudClearTime = snapshot.val();
+            if (cloudClearTime && String(cloudClearTime) !== myLastClear) {
+                console.log("偵測到版本更新，執行同步清空");
+                localMarks = {"A":[],"B":[],"C":[],"D":[]};
+                myLastClear = String(cloudClearTime);
+                
+                localStorage.setItem('rjpq_marks', JSON.stringify(localMarks));
+                localStorage.setItem('rjpq_last_clear_time', myLastClear);
+                
+                refreshUI();
+            }
+        });
 
         const container = document.getElementById('grid-container');
         for (let l = 10; l >= 1; l--) {
             const row = document.createElement('div');
             row.className = 'flex items-center gap-1.5 md:gap-2 mb-1.5'; 
-            
             const levelLabel = document.createElement('div');
             levelLabel.className = 'w-10 h-10 flex items-center justify-center text-gray-500 font-bold border border-darkborder rounded-lg bg-black/10 text-sm md:text-base shrink-0';
             levelLabel.innerText = l;
@@ -58,43 +75,68 @@
             slotsGroup.className = 'flex flex-row-reverse gap-1.5 md:gap-2';
             for (let s = 1; s <= 4; s++) {
                 const btn = document.createElement('button');
-                btn.id = `slot-${l}-${s}`;
-                btn.className = 'w-16 h-10 md:w-20 md:h-10 border border-darkborder rounded-lg flex items-center justify-center font-bold text-gray-500 bg-darkcard transition-all text-base';
+                const sid = `slot-${l}-${s}`;
+                btn.id = sid;
+                btn.className = 'w-16 h-10 md:w-20 md:h-10 border border-darkborder rounded-lg flex items-center justify-center font-bold text-gray-500 bg-darkcard transition-all text-base relative overflow-hidden';
                 btn.innerText = s;
                 btn.onclick = () => toggleSlot(l, s);
+                btn.oncontextmenu = (e) => {
+                    e.preventDefault();
+                    toggleMark(sid);
+                };
                 slotsGroup.appendChild(btn);
             }
             row.appendChild(slotsGroup);
             container.appendChild(row);
         }
 
+        function toggleMark(sid) {
+            const userMarks = localMarks[currentUser];
+            const index = userMarks.indexOf(sid);
+            if (index > -1) userMarks.splice(index, 1);
+            else userMarks.push(sid);
+            saveMarks();
+            refreshUI();
+        }
+
+        function saveMarks() {
+            localStorage.setItem('rjpq_marks', JSON.stringify(localMarks));
+        }
+
+        async function refreshUI() {
+            const snapshot = await get(slotsRef);
+            updateDisplay(snapshot.val());
+        }
+
         function updateDisplay(data) {
             let myPassword = [];
-            document.querySelectorAll('button[id^="slot-"]').forEach(b => {
-                b.className = 'w-16 h-10 md:w-20 md:h-10 border border-darkborder rounded-lg flex items-center justify-center font-bold text-gray-500 bg-darkcard transition-all text-base';
+            const userMarks = localMarks[currentUser];
+            document.querySelectorAll('button[id^="slot-"]').forEach(btn => {
+                const sid = btn.id;
+                const originalNum = sid.split('-')[2];
+                btn.className = 'w-16 h-10 md:w-20 md:h-10 border border-darkborder rounded-lg flex items-center justify-center font-bold text-gray-500 bg-darkcard transition-all text-base relative';
+                btn.innerText = originalNum;
+
+                if (data && data[sid]) {
+                    const occupant = data[sid];
+                    btn.classList.add(users[occupant].color, 'text-white', 'border-transparent');
+                } else if (userMarks.includes(sid)) {
+                    btn.classList.add('border-red-900/50');
+                    btn.innerHTML = `<span class="text-red-500 absolute inset-0 flex items-center justify-center text-2xl">×</span><span class="opacity-20">${originalNum}</span>`;
+                }
             });
 
             for (let l = 1; l <= 10; l++) {
                 let layerChoice = "_";
                 for (let s = 1; s <= 4; s++) {
-                    const sid = `slot-${l}-${s}`;
-                    if (data && data[sid]) {
-                        const occupant = data[sid];
-                        const btn = document.getElementById(sid);
-                        btn.classList.add(users[occupant].color, 'text-white', 'border-transparent');
-                        if (occupant === currentUser) layerChoice = s;
-                    }
+                    if (data && data[`slot-${l}-${s}`] === currentUser) layerChoice = s;
                 }
                 myPassword.push(layerChoice);
             }
-            const p1 = myPassword.slice(0, 5).join('');
-            const p2 = myPassword.slice(5, 10).join('');
-            document.getElementById('password-display').innerText = `${p1} ${p2}`;
+            document.getElementById('password-display').innerText = `${myPassword.slice(0, 5).join('')} ${myPassword.slice(5, 10).join('')}`;
         }
 
-        onValue(slotsRef, (snapshot) => {
-            updateDisplay(snapshot.val());
-        });
+        onValue(slotsRef, (snapshot) => updateDisplay(snapshot.val()));
 
         async function toggleSlot(level, slot) {
             const clickedId = `slot-${level}-${slot}`;
@@ -105,57 +147,64 @@
                 await set(ref(db, `slots/${clickedId}`), null);
             } else if (!data[clickedId]) {
                 for (let s = 1; s <= 4; s++) {
-                    if (data[`slot-${level}-${s}`] === currentUser) {
-                        await set(ref(db, `slots/slot-${level}-${s}`), null);
-                    }
+                    if (data[`slot-${level}-${s}`] === currentUser) await set(ref(db, `slots/slot-${level}-${s}`), null);
                 }
                 await set(ref(db, `slots/${clickedId}`), currentUser);
+                localMarks[currentUser] = localMarks[currentUser].filter(sid => !sid.startsWith(`slot-${level}-`));
+                saveMarks();
             }
+            refreshUI();
         }
 
         window.setUser = (u) => { 
             currentUser = u; 
             document.getElementById('current-user-tag').innerText = users[u].name;
             document.getElementById('current-user-tag').className = `px-3 py-1 rounded-full text-white font-bold shadow-md text-xs ${users[u].color}`;
-            get(slotsRef).then((snap) => updateDisplay(snap.val()));
+            refreshUI();
         };
-        window.clearAll = () => set(slotsRef, null);
+        
+        window.clearAll = async () => {
+            const nowTime = Date.now().toString();
+            await set(slotsRef, null);
+            await set(clearRef, nowTime); 
+            
+            localMarks = {"A":[],"B":[],"C":[],"D":[]};
+            myLastClear = nowTime;
+            localStorage.setItem('rjpq_marks', JSON.stringify(localMarks));
+            localStorage.setItem('rjpq_last_clear_time', myLastClear);
+            
+            refreshUI();
+        };
+
         setUser('A');
     </script>
     <style>
         body { touch-action: manipulation; }
+        button { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none;}
     </style>
 </head>
 <body class="bg-darkbg text-gray-400 min-h-screen p-4 flex flex-col items-center font-sans overflow-x-hidden">
-
     <div class="flex flex-col gap-3">
-        
         <div class="flex justify-between items-end px-1 pb-1">
             <h1 class="text-2xl font-bold text-white tracking-[0.2em]">RJPQ</h1>
             <div id="current-user-tag">101</div>
         </div>
-
         <div class="bg-darkcard border border-darkborder p-3 rounded-xl shadow-lg flex justify-center">
             <div class="grid grid-cols-4 gap-2">
-                <button onclick="setUser('A')" class="py-2 px-4 md:px-5 bg-morandi-red text-white rounded font-bold hover:brightness-110 transition text-sm">101</button>
-                <button onclick="setUser('B')" class="py-2 px-4 md:px-5 bg-morandi-blue text-white rounded font-bold hover:brightness-110 transition text-sm">102</button>
-                <button onclick="setUser('C')" class="py-2 px-4 md:px-5 bg-morandi-green text-white rounded font-bold hover:brightness-110 transition text-sm">103</button>
-                <button onclick="setUser('D')" class="py-2 px-4 md:px-5 bg-morandi-yellow text-white rounded font-bold hover:brightness-110 transition text-sm">104</button>
+                <button onclick="setUser('A')" class="py-2 px-4 md:px-5 bg-morandi-red text-white rounded font-bold text-sm">101</button>
+                <button onclick="setUser('B')" class="py-2 px-4 md:px-5 bg-morandi-blue text-white rounded font-bold text-sm">102</button>
+                <button onclick="setUser('C')" class="py-2 px-4 md:px-5 bg-morandi-green text-white rounded font-bold text-sm">103</button>
+                <button onclick="setUser('D')" class="py-2 px-4 md:px-5 bg-morandi-yellow text-white rounded font-bold text-sm">104</button>
             </div>
         </div>
-
         <div id="grid-container" class="bg-darkcard border border-darkborder p-5 rounded-2xl shadow-2xl flex flex-col items-center"></div>
-
         <div class="bg-black/10 border border-darkborder p-3 rounded-xl flex flex-col items-center shadow-inner">
             <span class="text-[10px] text-gray-600 uppercase tracking-[0.4em] mb-1">My Sequence</span>
             <div id="password-display" class="text-2xl md:text-3xl font-mono font-bold tracking-[0.2em] text-gray-200">_____ _____</div>
         </div>
-
         <button onclick="clearAll()" class="py-2.5 bg-zinc-700 text-gray-300 border border-zinc-600 rounded-lg hover:bg-zinc-600 hover:text-white transition text-xs font-bold tracking-[0.3em] shadow-md">
             CLEAR ALL SLOTS
         </button>
-        
     </div>
-
 </body>
 </html>
