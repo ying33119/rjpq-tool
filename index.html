@@ -122,44 +122,48 @@
                 btn.className = 'w-16 h-10 md:w-20 md:h-10 border border-darkborder rounded-lg flex items-center justify-center font-bold text-gray-500 bg-darkcard transition-all text-base relative overflow-hidden';
                 btn.innerText = s;
 
-                // --- support Safari long press x ---
-                let touchTimer;
-                let isLongPress = false;
+                // --- double tap ---
+                let lastTap = 0;
+                let tapTimeout;
 
-                btn.addEventListener('touchstart', () => {
-                    isLongPress = false;
-                    touchTimer = setTimeout(() => {
-                        isLongPress = true;
-                        toggleMark(sid);
-                        if (navigator.vibrate) navigator.vibrate(50); 
-                    }, 600); // 0.6sec
-                }, { passive: true });
-
+                // smartphone detect
                 btn.addEventListener('touchend', (e) => {
-                    clearTimeout(touchTimer);
-                    if (!isLongPress) {
-                        toggleSlot(l, s);
-                    }
+                    const currentTime = new Date().getTime();
+                    const tapLength = currentTime - lastTap;
+                    clearTimeout(tapTimeout);
+
+                    if (tapLength < 300 && tapLength > 0) {
+                        // double tap
+                        toggleMark(sid);
+                        if (navigator.vibrate) navigator.vibrate(50);
+                        lastTap = 0;
+                    } else {
+                        // single tap
+                        tapTimeout = setTimeout(() => {
+                            toggleSlot(l, s); 
+                            lastTap = 0;
+                        }, 250);
+                    }                    
+                    lastTap = currentTime;
+                    
                     if (e.cancelable) e.preventDefault();
                 }, false);
 
-                btn.addEventListener('touchmove', () => {
-                    clearTimeout(touchTimer);
-                }, { passive: true });
-
-                // PC compatible
+                // --- PC compatible ---
                 btn.onclick = (e) => {
-                    if (e.pointerType === 'mouse') toggleSlot(l, s);
+                    if (e.pointerType === 'mouse') {
+                        toggleSlot(l, s);
+                    }
                 };
+
                 btn.oncontextmenu = (e) => {
                     e.preventDefault();
-                    if (e.pointerType === 'mouse') toggleMark(sid);
+                    if (e.pointerType === 'mouse') {
+                        toggleMark(sid);
+                    }
                 };
 
                 slotsGroup.appendChild(btn);
-            }
-            row.appendChild(slotsGroup);
-            container.appendChild(row);
         }
 
         // --- main function ---
